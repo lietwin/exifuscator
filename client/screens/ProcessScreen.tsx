@@ -1,0 +1,212 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { StyleSheet, View, Platform, Alert } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from "expo-media-library";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import * as Haptics from "expo-haptics";
+
+import { ImagePreviewZone } from "@/components/ImagePreviewZone";
+import { TacticalButton } from "@/components/TacticalButton";
+import { StatusIndicator } from "@/components/StatusIndicator";
+import { Spacing } from "@/constants/theme";
+import { loadSettings, AppSettings, DEFAULT_SETTINGS } from "@/lib/storage";
+import {
+  processImageScorched,
+  processImageGhosted,
+  ProcessingResult,
+} from "@/lib/exif-processor";
+import { RootStackParamList } from "@/navigation/RootStackNavigator";
+
+type StatusState = "idle" | "processing" | "success" | "error";
+
+export default function ProcessScreen() {
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [status, setStatus] = useState<StatusState>("idle");
+  const [processMode, setProcessMode] = useState<"scorched" | "ghosted">("scorched");
+  const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    loadSettings().then(setSettings);
+  }, []);
+
+  const pickImage = useCallback(async () => {
+    const { status: permissionStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionStatus !== "granted") {
+      if (Platform.OS !== "web") {
+        Alert.alert(
+          "Permission Required",
+          "Camera roll access is needed to select images for processing.",
+          [{ text: "OK" }]
+        );
+      }
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 1,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setImageUri(asset.uri);
+      if (asset.base64) {
+        setImageBase64(`data:image/jpeg;base64,${asset.base64}`);
+      }
+      setStatus("idle");
+      setProcessingResult(null);
+    }
+  }, []);
+
+  const processImage = useCallback(async (mode: "scorched" | "ghosted") => {
+    if (!imageBase64) return;
+
+    setStatus("processing");
+    setProcessMode(mode);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    setTimeout(() => {
+      try {
+        let result: ProcessingResult;
+        
+        if (mode === "scorched") {
+          result = processImageScorched(imageBase64);
+        } else {
+          result = processImageGhosted(imageBase64, {
+            gpsRadiusKm: settings.gpsRadiusKm,
+            timestampShiftHours: settings.timestampShiftHours,
+            deviceProfile: settings.deviceProfile,
+          });
+        }
+
+        setProcessingResult(result);
+        setStatus("success");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        console.error("Processing failed:", error);
+        setStatus("error");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    }, 500);
+  }, [imageBase64, settings]);
+
+  const shareImage = useCallback(async () => {
+    if (!processingResult) return;
+
+    try {
+      const base64Data = processingResult.processedImageBase64.replace(
+        /^data:image\/\w+;base64,/,
+        ""
+      );
+
+      const filename = `exifuscator_${Date.now()}.jpg`;
+      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+      await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: "image/jpeg",
+          dialogTitle: "Share Sanitized Image",
+        });
+      } else {
+        const { status: saveStatus } = await MediaLibrary.requestPermissionsAsync();
+        if (saveStatus === "granted") {
+          await MediaLibrary.saveToLibraryAsync(fileUri);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Alert.alert("Saved", "Image saved to camera roll.");
+        }
+      }
+    } catch (error) {
+      console.error("Share failed:", error);
+      Alert.alert("Error", "Failed to share image.");
+    }
+  }, [processingResult]);
+
+  const viewFingerprint = useCallback(() => {
+    if (processingResult) {
+      navigation.navigate("Fingerprint", { result: processingResult });
+    }
+  }, [navigation, processingResult]);
+
+  const hasImage = Boolean(imageUri);
+  const isProcessed = status === "success";
+
+  return (
+    <View style={[styles.container, { paddingTop: headerHeight + Spacing.xl }]}>
+      <View style={styles.previewSection}>
+        <ImagePreviewZone
+          imageUri={isProcessed && processingResult 
+            ? `data:image/jpeg;base64,${processingResult.processedImageBase64.replace(/^data:image\/\w+;base64,/, "")}`
+            : imageUri
+          }
+          onPress={pickImage}
+          isProcessed={isProcessed}
+          testID="button-select-image"
+        />
+      </View>
+
+      <View style={styles.buttonsSection}>
+        <TacticalButton
+          label="SCORCHED EARTH"
+          variant="scorched"
+          onPress={() => processImage("scorched")}
+          disabled={!hasImage || status === "processing"}
+          testID="button-scorched"
+        />
+        <TacticalButton
+          label="GHOSTED"
+          variant="ghosted"
+          onPress={() => processImage("ghosted")}
+          disabled={!hasImage || status === "processing"}
+          testID="button-ghosted"
+        />
+      </View>
+
+      <View style={[styles.statusSection, { paddingBottom: insets.bottom + Spacing.xl }]}>
+        <StatusIndicator
+          state={status}
+          mode={processMode}
+          onSharePress={shareImage}
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  previewSection: {
+    flex: 0.45,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  buttonsSection: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.lg,
+  },
+  statusSection: {
+    flex: 0.35,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
