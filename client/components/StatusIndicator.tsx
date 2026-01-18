@@ -21,9 +21,11 @@ interface StatusIndicatorProps {
   state: StatusState;
   mode?: "scorched" | "ghosted";
   onSharePress?: () => void;
+  onViewFingerprint?: () => void;
+  hasResult?: boolean;
 }
 
-export function StatusIndicator({ state, mode = "scorched", onSharePress }: StatusIndicatorProps) {
+export function StatusIndicator({ state, mode = "scorched", onSharePress, onViewFingerprint, hasResult }: StatusIndicatorProps) {
   const opacity = useSharedValue(1);
   const scale = useSharedValue(1);
 
@@ -101,18 +103,31 @@ export function StatusIndicator({ state, mode = "scorched", onSharePress }: Stat
         <Feather name="check-circle" size={24} color="#30D158" />
         <ThemedText style={styles.successText}>SANITIZED</ThemedText>
       </View>
-      <Animated.View style={animatedButtonStyle}>
+      <View style={styles.buttonsRow}>
+        <Animated.View style={animatedButtonStyle}>
+          <Pressable
+            onPress={handlePress}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            style={styles.shareButton}
+            testID="button-share"
+          >
+            <Feather name="share" size={18} color="#FFFFFF" />
+            <ThemedText style={styles.shareText}>SHARE</ThemedText>
+          </Pressable>
+        </Animated.View>
         <Pressable
-          onPress={handlePress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          style={styles.shareButton}
-          testID="button-share"
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onViewFingerprint?.();
+          }}
+          style={[styles.shareButton, styles.fingerprintButton]}
+          testID="button-fingerprint"
         >
-          <Feather name="share" size={20} color="#FFFFFF" />
-          <ThemedText style={styles.shareText}>TAP TO SHARE</ThemedText>
+          <Feather name="shield" size={18} color="#FF9500" />
+          <ThemedText style={[styles.shareText, { color: "#FF9500" }]}>VIEW DATA</ThemedText>
         </Pressable>
-      </Animated.View>
+      </View>
     </View>
   );
 }
@@ -171,9 +186,16 @@ const styles = StyleSheet.create({
   },
   shareText: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     letterSpacing: 1,
     fontFamily: Fonts?.mono,
+  },
+  buttonsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  fingerprintButton: {
+    borderColor: "#4D3800",
   },
 });

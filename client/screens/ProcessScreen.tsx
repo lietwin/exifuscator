@@ -117,7 +117,7 @@ export default function ProcessScreen() {
       const fileUri = `${FileSystem.cacheDirectory}${filename}`;
 
       await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: "base64",
       });
 
       if (await Sharing.isAvailableAsync()) {
@@ -149,7 +149,7 @@ export default function ProcessScreen() {
   const isProcessed = status === "success";
 
   return (
-    <View style={[styles.container, { paddingTop: headerHeight + Spacing.xl }]}>
+    <View style={[styles.container, { paddingTop: headerHeight + Spacing.lg }]}>
       <View style={styles.previewSection}>
         <ImagePreviewZone
           imageUri={isProcessed && processingResult 
@@ -164,14 +164,14 @@ export default function ProcessScreen() {
 
       <View style={styles.buttonsSection}>
         <TacticalButton
-          label="SCORCHED EARTH"
+          label="ERASE METADATA"
           variant="scorched"
           onPress={() => processImage("scorched")}
           disabled={!hasImage || status === "processing"}
           testID="button-scorched"
         />
         <TacticalButton
-          label="GHOSTED"
+          label="GHOST METADATA"
           variant="ghosted"
           onPress={() => processImage("ghosted")}
           disabled={!hasImage || status === "processing"}
@@ -179,11 +179,13 @@ export default function ProcessScreen() {
         />
       </View>
 
-      <View style={[styles.statusSection, { paddingBottom: insets.bottom + Spacing.xl }]}>
+      <View style={[styles.statusSection, { paddingBottom: insets.bottom + Spacing.lg }]}>
         <StatusIndicator
           state={status}
           mode={processMode}
           onSharePress={shareImage}
+          onViewFingerprint={viewFingerprint}
+          hasResult={isProcessed}
         />
       </View>
     </View>
@@ -196,17 +198,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000",
   },
   previewSection: {
-    flex: 0.45,
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: Spacing.lg,
   },
   buttonsSection: {
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.lg,
+    gap: Spacing.md,
   },
   statusSection: {
-    flex: 0.35,
     alignItems: "center",
     justifyContent: "center",
+    paddingTop: Spacing.lg,
   },
 });
