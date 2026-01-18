@@ -5,6 +5,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -58,15 +59,27 @@ export default function ProcessScreen() {
       mediaTypes: ["images"],
       allowsEditing: false,
       quality: 1,
-      base64: true,
     });
 
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       setImageUri(asset.uri);
-      if (asset.base64) {
-        setImageBase64(`data:image/jpeg;base64,${asset.base64}`);
+      
+      try {
+        const manipulated = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [],
+          { format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        
+        if (manipulated.base64) {
+          setImageBase64(`data:image/jpeg;base64,${manipulated.base64}`);
+        }
+      } catch (error) {
+        console.error("Image conversion failed:", error);
+        Alert.alert("Error", "Failed to process image format.");
       }
+      
       setStatus("idle");
       setProcessingResult(null);
     }
