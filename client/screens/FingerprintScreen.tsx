@@ -45,12 +45,28 @@ export default function FingerprintScreen() {
   const [viewMode, setViewMode] = useState<0 | 1>(0);
 
   const accentColor = result.mode === "scorched" ? "#FF3B30" : "#FF9500";
-  const modeLabel = result.mode === "scorched" ? "SCORCHED EARTH" : "GHOSTED";
+  const modeLabel = result.mode === "scorched" ? "ERASE METADATA" : "GHOST METADATA";
 
   const getFieldValue = (exif: ExifData, field: string): string => {
     const value = (exif as Record<string, unknown>)[field];
     return formatExifValue(field, value);
   };
+
+  const currentExif = viewMode === 0 ? result.originalExif : result.processedExif;
+  const isShowingBefore = viewMode === 0;
+  const isScorched = result.mode === "scorched";
+
+  const hasAnyOriginalData = DISPLAY_FIELDS.some(field => {
+    const value = getFieldValue(result.originalExif, field);
+    return value !== "—";
+  });
+
+  const hasAnyProcessedData = DISPLAY_FIELDS.some(field => {
+    const value = getFieldValue(result.processedExif, field);
+    return value !== "—";
+  });
+
+  const showEmptyState = isShowingBefore ? !hasAnyOriginalData : !hasAnyProcessedData;
 
   return (
     <ScrollView
@@ -80,33 +96,49 @@ export default function FingerprintScreen() {
         />
       </View>
 
-      <View style={styles.tableContainer}>
-        {DISPLAY_FIELDS.map((field) => {
-          const originalValue = getFieldValue(result.originalExif, field);
-          const processedValue = getFieldValue(result.processedExif, field);
-          
-          if (originalValue === "—" && processedValue === "—") {
-            return null;
-          }
+      {showEmptyState ? (
+        <View style={styles.emptyContainer}>
+          <ThemedText style={styles.emptyText}>
+            {isShowingBefore 
+              ? "No metadata was found in the original image."
+              : isScorched
+                ? "All metadata has been completely erased."
+                : "No metadata present after processing."}
+          </ThemedText>
+        </View>
+      ) : (
+        <View style={styles.tableContainer}>
+          {DISPLAY_FIELDS.map((field) => {
+            const value = getFieldValue(currentExif, field);
+            
+            if (value === "—") {
+              return null;
+            }
 
-          return (
-            <MetadataRow
-              key={field}
-              label={getExifFieldLabel(field)}
-              originalValue={originalValue}
-              processedValue={processedValue}
-              mode={viewMode === 0 ? "before" : "after"}
-              processMode={result.mode}
-            />
-          );
-        })}
-      </View>
+            const originalValue = getFieldValue(result.originalExif, field);
+            const processedValue = getFieldValue(result.processedExif, field);
+
+            return (
+              <MetadataRow
+                key={field}
+                label={getExifFieldLabel(field)}
+                originalValue={originalValue}
+                processedValue={processedValue}
+                mode={isShowingBefore ? "before" : "after"}
+                processMode={result.mode}
+              />
+            );
+          })}
+        </View>
+      )}
 
       <View style={styles.summary}>
         <ThemedText style={styles.summaryText}>
-          {result.mode === "scorched"
-            ? "All metadata has been completely removed from this image."
-            : "Identifiable metadata has been obfuscated with synthetic noise."}
+          {isShowingBefore
+            ? "This is the original metadata embedded in your image."
+            : isScorched
+              ? "All metadata has been completely erased from this image."
+              : "Identifiable metadata has been obfuscated with synthetic noise."}
         </ThemedText>
       </View>
     </ScrollView>
@@ -142,6 +174,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#330A09",
     overflow: "hidden",
+  },
+  emptyContainer: {
+    backgroundColor: "#1C1C1E",
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#330A09",
+    padding: Spacing.xl,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 120,
+  },
+  emptyText: {
+    color: "#AEAEB2",
+    fontSize: 14,
+    fontFamily: Fonts?.mono,
+    textAlign: "center",
+    lineHeight: 22,
   },
   summary: {
     marginTop: Spacing.xl,
