@@ -66,18 +66,46 @@ export default function ProcessScreen() {
       setImageUri(asset.uri);
       
       try {
-        const manipulated = await ImageManipulator.manipulateAsync(
-          asset.uri,
-          [],
-          { format: ImageManipulator.SaveFormat.JPEG, base64: true }
-        );
-        
-        if (manipulated.base64) {
-          setImageBase64(`data:image/jpeg;base64,${manipulated.base64}`);
+        const isHeic = asset.mimeType === "image/heic" || 
+          asset.mimeType === "image/heif" ||
+          asset.uri.toLowerCase().endsWith(".heic") ||
+          asset.uri.toLowerCase().endsWith(".heif");
+
+        if (isHeic) {
+          let originalExifBytes: string | null = null;
+          try {
+            const origBase64 = await FileSystem.readAsStringAsync(asset.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            const origDataUri = `data:image/jpeg;base64,${origBase64}`;
+            const piexif = (await import("piexifjs")).default;
+            const exifObj = piexif.load(origDataUri);
+            originalExifBytes = piexif.dump(exifObj);
+          } catch (_) {}
+
+          const manipulated = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [],
+            { format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+
+          if (manipulated.base64) {
+            let dataUri = `data:image/jpeg;base64,${manipulated.base64}`;
+            if (originalExifBytes) {
+              const piexif = (await import("piexifjs")).default;
+              dataUri = piexif.insert(originalExifBytes, dataUri);
+            }
+            setImageBase64(dataUri);
+          }
+        } else {
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          setImageBase64(`data:image/jpeg;base64,${base64}`);
         }
       } catch (error) {
-        console.error("Image conversion failed:", error);
-        Alert.alert("Error", "Failed to process image format.");
+        console.error("Image read failed:", error);
+        Alert.alert("Error", "Failed to read image data.");
       }
       
       setStatus("idle");
