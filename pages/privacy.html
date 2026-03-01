@@ -11,21 +11,16 @@
   </style>
 </head>
 <body>
-  <div id="content">Loading privacy policy…</div>
+  <div id="content">
+      <h2>Exifuscator Privacy Policy</h2>
+    <em>Effective Date: January 18, 2026</em>
+  <ol>
+<li>Data Minimization: Exifuscator is designed to protect privacy by design. We do not collect, store, or transmit any personal data, photos, or metadata.</li>
+<li>On-Device Processing: All metadata obfuscation and "Ghosting" operations are performed locally on your device's secure enclave. No image data ever leaves the device.</li>
+<li>Third-Party Analytics: This app contains no third-party SDKs, trackers, or analytics.</li>
+<li>User Control: You maintain 100% ownership and control of your media. Contact: exifuscator@liminaladvantage.com</li>
+  </ol>  
+  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script>
-    (async function(){
-      const rawUrl = 'https://raw.githubusercontent.com/lietwin/exifuscator/master/PRIVACY.md';
-      try {
-        const r = await fetch(rawUrl);
-        if (!r.ok) throw new Error('Failed to fetch PRIVACY.md');
-        const md = await r.text();
-        document.getElementById('content').innerHTML = marked.parse(md);
-      } catch (e) {
-        document.getElementById('content').textContent = 'Could not load privacy policy: ' + e.message;
-      }
-    })();
-  </script>
 </body>
 </html>
