@@ -25,6 +25,66 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type StatusState = "idle" | "processing" | "success" | "error";
 
+function decimalToRational(val: number): [number, number] {
+  const denom = 10000;
+  return [Math.round(val * denom), denom];
+}
+
+function decimalDegreesToDMS(dd: number): [[number, number], [number, number], [number, number]] {
+  const abs = Math.abs(dd);
+  const deg = Math.floor(abs);
+  const minFloat = (abs - deg) * 60;
+  const min = Math.floor(minFloat);
+  const sec = (minFloat - min) * 60;
+  return [[deg, 1], [min, 1], [Math.round(sec * 100), 100]];
+}
+
+function buildPiexifFromNativeExif(piexif: any, nativeExif: Record<string, any>) {
+  const zeroth: Record<number, any> = {};
+  const exifIfd: Record<number, any> = {};
+  const gpsIfd: Record<number, any> = {};
+
+  if (nativeExif.Make) zeroth[piexif.ImageIFD.Make] = nativeExif.Make;
+  if (nativeExif.Model) zeroth[piexif.ImageIFD.Model] = nativeExif.Model;
+  if (nativeExif.Software) zeroth[piexif.ImageIFD.Software] = nativeExif.Software;
+  if (nativeExif.DateTime) zeroth[piexif.ImageIFD.DateTime] = nativeExif.DateTime;
+  if (nativeExif.Orientation) zeroth[piexif.ImageIFD.Orientation] = nativeExif.Orientation;
+  if (nativeExif.Copyright) zeroth[piexif.ImageIFD.Copyright] = nativeExif.Copyright;
+  if (nativeExif.Artist) zeroth[piexif.ImageIFD.Artist] = nativeExif.Artist;
+  if (nativeExif.PixelXDimension) zeroth[piexif.ImageIFD.ImageWidth] = nativeExif.PixelXDimension;
+  if (nativeExif.PixelYDimension) zeroth[piexif.ImageIFD.ImageLength] = nativeExif.PixelYDimension;
+  if (nativeExif.XResolution) zeroth[piexif.ImageIFD.XResolution] = decimalToRational(nativeExif.XResolution);
+  if (nativeExif.YResolution) zeroth[piexif.ImageIFD.YResolution] = decimalToRational(nativeExif.YResolution);
+
+  if (nativeExif.DateTimeOriginal) exifIfd[piexif.ExifIFD.DateTimeOriginal] = nativeExif.DateTimeOriginal;
+  if (nativeExif.DateTimeDigitized) exifIfd[piexif.ExifIFD.DateTimeDigitized] = nativeExif.DateTimeDigitized;
+  if (nativeExif.ISOSpeedRatings != null) {
+    exifIfd[piexif.ExifIFD.ISOSpeedRatings] = Array.isArray(nativeExif.ISOSpeedRatings)
+      ? nativeExif.ISOSpeedRatings[0] : nativeExif.ISOSpeedRatings;
+  }
+  if (nativeExif.ExposureTime != null) exifIfd[piexif.ExifIFD.ExposureTime] = decimalToRational(nativeExif.ExposureTime);
+  if (nativeExif.FNumber != null) exifIfd[piexif.ExifIFD.FNumber] = decimalToRational(nativeExif.FNumber);
+  if (nativeExif.FocalLength != null) exifIfd[piexif.ExifIFD.FocalLength] = decimalToRational(nativeExif.FocalLength);
+  if (nativeExif.LensModel) exifIfd[piexif.ExifIFD.LensModel] = nativeExif.LensModel;
+  if (nativeExif.LensMake) exifIfd[piexif.ExifIFD.LensMake] = nativeExif.LensMake;
+  if (nativeExif.Flash != null) exifIfd[piexif.ExifIFD.Flash] = nativeExif.Flash;
+
+  const lat = nativeExif.GPSLatitude;
+  const lng = nativeExif.GPSLongitude;
+  if (lat != null && lng != null) {
+    gpsIfd[piexif.GPSIFD.GPSLatitude] = decimalDegreesToDMS(lat);
+    gpsIfd[piexif.GPSIFD.GPSLatitudeRef] = lat >= 0 ? "N" : "S";
+    gpsIfd[piexif.GPSIFD.GPSLongitude] = decimalDegreesToDMS(lng);
+    gpsIfd[piexif.GPSIFD.GPSLongitudeRef] = lng >= 0 ? "E" : "W";
+  }
+  if (nativeExif.GPSAltitude != null) {
+    gpsIfd[piexif.GPSIFD.GPSAltitude] = decimalToRational(Math.abs(nativeExif.GPSAltitude));
+    gpsIfd[piexif.GPSIFD.GPSAltitudeRef] = nativeExif.GPSAltitude >= 0 ? 0 : 1;
+  }
+
+  return { "0th": zeroth, Exif: exifIfd, GPS: gpsIfd, "1st": {}, Interop: {} };
+}
+
 export default function ProcessScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -59,6 +119,7 @@ export default function ProcessScreen() {
       mediaTypes: ["images"],
       allowsEditing: false,
       quality: 1,
+      exif: true,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -72,17 +133,6 @@ export default function ProcessScreen() {
           asset.uri.toLowerCase().endsWith(".heif");
 
         if (isHeic) {
-          let originalExifBytes: string | null = null;
-          try {
-            const origBase64 = await FileSystem.readAsStringAsync(asset.uri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            const origDataUri = `data:image/jpeg;base64,${origBase64}`;
-            const piexif = (await import("piexifjs")).default;
-            const exifObj = piexif.load(origDataUri);
-            originalExifBytes = piexif.dump(exifObj);
-          } catch (_) {}
-
           const manipulated = await ImageManipulator.manipulateAsync(
             asset.uri,
             [],
@@ -91,10 +141,18 @@ export default function ProcessScreen() {
 
           if (manipulated.base64) {
             let dataUri = `data:image/jpeg;base64,${manipulated.base64}`;
-            if (originalExifBytes) {
-              const piexif = (await import("piexifjs")).default;
-              dataUri = piexif.insert(originalExifBytes, dataUri);
+
+            if (asset.exif) {
+              try {
+                const piexif = (await import("piexifjs")).default;
+                const exifObj = buildPiexifFromNativeExif(piexif, asset.exif);
+                const exifBytes = piexif.dump(exifObj);
+                dataUri = piexif.insert(exifBytes, dataUri);
+              } catch (e) {
+                console.warn("HEIC EXIF injection failed:", e);
+              }
             }
+
             setImageBase64(dataUri);
           }
         } else {
