@@ -1,4 +1,8 @@
+---
+permalink: /PRIVACY.md
+---
 Exifuscator Privacy Policy
+
 Effective Date: January 18, 2026
 
 1. Data Minimization: Exifuscator is built on a "Zero-Knowledge" architecture. We do not collect, store, or transmit any personal data, photos, or metadata.
