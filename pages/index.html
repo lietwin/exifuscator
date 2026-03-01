@@ -11,21 +11,22 @@
   </style>
 </head>
 <body>
-  <div id="content">Loading README…</div>
-
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script>
-    (async function(){
-      const rawUrl = 'https://raw.githubusercontent.com/lietwin/exifuscator/master/README.md';
-      try {
-        const r = await fetch(rawUrl);
-        if (!r.ok) throw new Error('Failed to fetch README');
-        const md = await r.text();
-        document.getElementById('content').innerHTML = marked.parse(md);
-      } catch (e) {
-        document.getElementById('content').textContent = 'Could not load README: ' + e.message;
-      }
-    })();
-  </script>
+  <div id="content">
+    <p>
+    Exifuscator is a high-performance utility for the privacy-conscious professional. 
+    The mobile app integrates directly into your workflow as a Share Extension, 
+    allowing you to audit and obfuscate photo metadata in seconds.
+    </p>
+   <p>
+     Core Beta Features: 
+     <ul>
+       <li>Share Sheet Integration: Process and mask photos directly from the Photos app or camera roll.</li>
+        <li>Ghost Metadata Mode: Inject randomized GPS jitter, shift timestamps, and spoof device signatures to blend into the digital noise.</li>
+        <li>Erase Metadata Mode: Instantly strip all EXIF, XMP, and ICC profiles for a zero-metadata footprint. </li>
+        <li>Forensic Diagnostics: Click on View Metadata to audit hidden headers, lens specifications, and GPS tags.</li>
+       <li>On-Device Processing: Zero-cloud architecture. Your data never leaves your device’s secure enclave.</li>
+     </ul>
+   </p>
+  </div>
 </body>
 </html>
